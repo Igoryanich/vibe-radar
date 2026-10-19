@@ -4,7 +4,7 @@ import { parseTrending } from "../src/collectors/github.ts";
 import { parseHf, parseHn, parseReddit } from "../src/collectors/social.ts";
 import { computeDelta, growthRatio } from "../src/metrics.ts";
 import { itemProjectKey, looksAiRelated, nameMentioned, projectKeyOf } from "../src/projects.ts";
-import { checkPost, cyrillicShare, figuresIn, htmlProblems, unknownFigures, visibleLength } from "../src/textcheck.ts";
+import { bareLinks, checkPost, cyrillicShare, figuresIn, htmlProblems, unknownFigures, visibleLength } from "../src/textcheck.ts";
 
 const H = 3600_000;
 
@@ -124,4 +124,16 @@ test("checkPost: length, Russian, links only from the input", () => {
   assert.ok(bad.some((p) => p.includes("длина")));
   assert.ok(bad.some((p) => p.includes("evil.example")));
   assert.ok(cyrillicShare("<b>Hello world</b>") < 0.5);
+  const bare = checkPost(`${text}
+Скачать: https://evil.example.com/x или github.com/fake/repo`, { maxChars: 1800, allowedLinks: new Set(["https://github.com/a/b"]), data: {} });
+  assert.ok(bare.some((p) => p.includes("evil.example.com")), "a bare URL bypassing <a href> is caught");
+  assert.ok(bare.some((p) => p.includes("github.com/fake/repo")), "a bare domain with a path is caught");
+});
+
+test("bareLinks: tool names and the input's own hosts are fine, foreign domains are not", () => {
+  const ok = new Set(["https://github.com/a/b", "https://godseye.app"]);
+  assert.deepEqual(bareLinks("сделано в bolt.new и v0.dev, версия 1.5", ok), []);
+  assert.deepEqual(bareLinks("на сайте godseye.app! и github.com/a/b", ok), []);
+  assert.deepEqual(bareLinks("<a href=\"https://github.com/a/b\">тут</a>, почта me@mail.com", ok), []);
+  assert.deepEqual(bareLinks("смотри scam-site.io", ok), ["scam-site.io"]);
 });

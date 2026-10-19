@@ -36,9 +36,10 @@ export function postDecision(p: ProjectRow, cfg: Config): { ok: true; update: bo
   if (!s) return { ok: false, reason: "no scan" };
   if (s.status !== "publish_post") return { ok: false, reason: `status ${s.status}` };
   const v = s.velocity;
-  const strong = s.hype_score >= cfg.POST_THRESHOLD;
+  // A 7+ means many platforms (prompt scale); a score from one GitHub list alone is not enough reach.
+  const strong = s.hype_score >= cfg.POST_THRESHOLD && !!v && v.platforms >= cfg.POST_MIN_PLATFORMS;
   const early = s.hype_score >= cfg.EARLY_POST_THRESHOLD && s.stage === "ранний сигнал" && !!v && isAnomalous(v, cfg);
-  if (!strong && !early) return { ok: false, reason: `hype ${s.hype_score} / ${s.stage} below post threshold` };
+  if (!strong && !early) return { ok: false, reason: `hype ${s.hype_score} / ${s.stage} below post threshold (platforms: ${v?.platforms ?? 0})` };
   if (p.post_count === 0) return { ok: true, update: false };
   // A repeat is an update, and only with real news: multiple growth, or a non-metric event after a cooldown.
   if (!s.is_update) return { ok: false, reason: "already posted, model saw no news" };

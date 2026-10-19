@@ -8,7 +8,7 @@ import { buildCandidates } from "../src/pipeline/candidates.ts";
 import { storeItem } from "../src/pipeline/collect.ts";
 import { maybeDigest } from "../src/pipeline/digest.ts";
 import { postDecision, queuePosts, type ProjectRow, updateAllowed } from "../src/pipeline/editorial.ts";
-import { applyScan, type Candidate } from "../src/pipeline/scan.ts";
+import { applyScan, type Candidate, candidateSchema } from "../src/pipeline/scan.ts";
 import { systemPrompt } from "../src/prompt.ts";
 
 const H = 3600_000;
@@ -116,8 +116,11 @@ test("post thresholds are enforced in code, not by the model's word", () => {
   assert.equal(postDecision(row({ hype_score: 6, stage: "ранний сигнал" }, fast), cfg).ok, true);
   assert.equal(postDecision(row({ hype_score: 6, stage: "взлетает" }, fast), cfg).ok, false);
   assert.equal(postDecision(row({ hype_score: 9, status: "digest_only" }), cfg).ok, false);
-  assert.equal(postDecision(row({ hype_score: 8 }, slow, { post_count: 1 }), cfg).ok, false, "repeat without news");
-  assert.deepEqual(postDecision(row({ hype_score: 8, is_update: true }, slow, { post_count: 1 }), cfg), { ok: true, update: true });
+  const wide = { ...slow, platforms: 2 };
+  assert.equal(postDecision(row({ hype_score: 8 }), cfg).ok, false, "a 7+ seen on one platform only lacks reach");
+  assert.deepEqual(postDecision(row({ hype_score: 8 }, wide), cfg), { ok: true, update: false });
+  assert.equal(postDecision(row({ hype_score: 8 }, wide, { post_count: 1 }), cfg).ok, false, "repeat without news");
+  assert.deepEqual(postDecision(row({ hype_score: 8, is_update: true }, wide, { post_count: 1 }), cfg), { ok: true, update: true });
 });
 
 test("update rule: ≥3× growth, or news after the cooldown", () => {
@@ -184,4 +187,11 @@ test("switching DRY_RUN off: projects drafted in test mode still get their real 
     db.all<{ channel: string }>("SELECT channel FROM publications ORDER BY id").map((r) => r.channel),
     ["dry-run", "@vibe_radar"],
   );
+});
+
+test("scan schema: category is required and normalised, never silently defaulted", () => {
+  const base = candidate({});
+  assert.equal(candidateSchema.parse({ ...base, category: "Vibe Tool" }).category, "vibe_tool");
+  assert.equal(candidateSchema.safeParse({ ...base, category: "crypto" }).success, false);
+  assert.equal(candidateSchema.safeParse({ ...base, category: undefined }).success, false);
 });

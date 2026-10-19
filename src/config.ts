@@ -64,6 +64,8 @@ const schema = z.object({
   RESCAN_HOURS: int(6),
   RESCAN_GROWTH: num(1.5),
   POST_THRESHOLD: int(7),
+  // A post at POST_THRESHOLD also needs measured reach: at least this many platforms (press and social mentions count as their own platforms).
+  POST_MIN_PLATFORMS: int(2),
   EARLY_POST_THRESHOLD: int(6),
   DIGEST_THRESHOLD: int(4),
   // "Anomalous velocity" (verified from collected metrics) that lets a 6/early-signal project get its own post.

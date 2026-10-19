@@ -8,7 +8,7 @@ import { systemPrompt } from "../prompt.ts";
 import { nowIso } from "../util.ts";
 import { buildCandidates, type ProjectInput } from "./candidates.ts";
 
-export const SCAN_VERSION = 1;
+export const SCAN_VERSION = 2;
 
 const STAGES = ["ранний сигнал", "взлетает", "мейнстрим"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -22,6 +22,9 @@ const stage = z.string().transform((s, ctx) => {
   return z.NEVER;
 });
 
+const CATEGORIES = ["indie", "opensource", "big_tech", "viral_demo", "vibe_tool"] as const;
+type Category = (typeof CATEGORIES)[number];
+
 const evidence = z.object({
   source: z.string().catch(""),
   url: z.string().catch(""),
@@ -34,7 +37,13 @@ export const candidateSchema = z.object({
   name: z.string().min(1),
   url: z.string().catch(""),
   author: z.string().nullable().catch("").transform((s) => s ?? ""),
-  category: z.enum(["indie", "opensource", "big_tech", "viral_demo", "vibe_tool"]).catch("indie"),
+  // Required: it becomes the post hashtag, so a wrong value is a schema error (one repair retry), not a silent default.
+  category: z.string().transform((s, ctx) => {
+    const t = s.toLowerCase().trim().replace(/[\s-]+/g, "_");
+    if ((CATEGORIES as readonly string[]).includes(t)) return t as Category;
+    ctx.addIssue({ code: "custom", message: `category must be one of: ${CATEGORIES.join(" | ")}` });
+    return z.NEVER;
+  }),
   summary: z.string().catch(""),
   hype_score: z.coerce.number().transform((n) => Math.max(1, Math.min(10, Math.round(n)))),
   stage,

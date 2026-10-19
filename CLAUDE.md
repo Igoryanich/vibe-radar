@@ -24,8 +24,9 @@ check, queue) → `digest.ts` (daily, after DIGEST_HOUR_LOCAL) → `publish.ts` 
 
 - Velocity comes only from measured counters (`metrics.ts`); never extrapolated.
 - No figure in a published text that is not in measured data (±5%) — `textcheck.unknownFigures`.
-- No link in a published text that collectors did not see — `editorial.allowedLinks` (model URLs are untrusted).
-- Post thresholds are re-checked in code (`postDecision`); a repeat needs ≥3× growth or news after a cooldown.
+- No link in a published text that collectors did not see — `editorial.allowedLinks` (model URLs are untrusted);
+  bare URLs/domains in the visible text are checked too (`textcheck.bareLinks`), since Telegram auto-links them.
+- Post thresholds are re-checked in code (`postDecision`); a ≥7 post also needs `POST_MIN_PLATFORMS` (2) platforms; a repeat needs ≥3× growth or news after a cooldown.
 - Scam is never posted (model status `skip`); `needs_check` is never posted.
 - Telegram delivery: `sending` is committed before the request; ambiguous outcomes become `uncertain`, never auto-retried.
 

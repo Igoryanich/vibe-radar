@@ -96,6 +96,22 @@ export function unknownFigures(html: string, data: unknown): number[] {
   return figuresIn(html).filter((n) => !known.some((k) => k > 0 && Math.abs(k - n) / k <= 0.05));
 }
 
+// Domains Telegram turns into links on its own. Names like "bolt.new" or "v0.dev" are left alone unless
+// they carry a path; a bare host is accepted only when it is the host of a link from the input.
+const BARE_LINK_RE = /(?:https?:\/\/|www\.)[^\s<>"]+|(?<![\p{L}\p{N}@.-])(?:[a-z0-9-]+\.)+(?:com|io|ai|app|org|net|co|me|so|sh|xyz|gg|tv|ru|info|site|online|link|ly|to)(?:\/[^\s<>"]*)?(?![\p{L}\p{N}-])/giu;
+
+/** Links in the visible text outside <a href> (Telegram makes them clickable, so they bypass the link whitelist). */
+export function bareLinks(html: string, allowed: Set<string>): string[] {
+  const allowedHosts = new Set([...allowed].map((u) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } }));
+  const text = decodeEntities(html.replace(/<a\s+href="[^"]*"\s*>/gi, " ").replace(/<[^>]*>/g, " "));
+  return [...text.matchAll(BARE_LINK_RE)]
+    .map((m) => m[0].replace(/[.,;:!?)»]+$/, ""))
+    .filter((l) => {
+      if (/^(https?:\/\/|www\.)/i.test(l) || l.includes("/")) return !allowed.has(normalizeLink(/^https?:/i.test(l) ? l : `https://${l}`));
+      return !allowedHosts.has(l.toLowerCase().replace(/^www\./, ""));
+    });
+}
+
 /** Full gate for a model-written post. */
 export function checkPost(html: string, opts: { maxChars: number; allowedLinks: Set<string>; data: unknown }): string[] {
   const problems = htmlProblems(html);
@@ -103,6 +119,7 @@ export function checkPost(html: string, opts: { maxChars: number; allowedLinks: 
   if (len > opts.maxChars) problems.push(`длина ${len} знаков, лимит ${opts.maxChars}`);
   if (len < 120) problems.push("слишком короткий текст");
   for (const h of hrefs(html)) if (!opts.allowedLinks.has(normalizeLink(h))) problems.push(`ссылки ${h} нет во входных данных`);
+  for (const l of bareLinks(html, opts.allowedLinks)) problems.push(`ссылки ${l} нет во входных данных (ссылки и домены — только из входа)`);
   if (cyrillicShare(html) < 0.5) problems.push("текст не на русском");
   const unknown = unknownFigures(html, opts.data);
   if (unknown.length) problems.push(`цифры, которых нет во входных данных: ${unknown.join(", ")}`);
