@@ -83,8 +83,9 @@ sources:
     url: https://www.producthunt.com/feed
 
   # ── Bluesky search (likes/reposts; mass-reach signal) ─────────────────────────────────
-  - { key: bsky-vibecoding, name: Bluesky «vibe coding», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", focused: true, config: { query: "vibe coding" } }
-  - { key: bsky-ibuilt, name: Bluesky «I built AI», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", config: { query: "\"I built\" AI" } }
+  # Disabled: the public AppView answers 403 to anonymous searchPosts from GitHub Actions (checked 2026-10-20).
+  - { key: bsky-vibecoding, name: Bluesky «vibe coding», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", focused: true, enabled: false, config: { query: "vibe coding" } }
+  - { key: bsky-ibuilt, name: Bluesky «I built AI», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", enabled: false, config: { query: "\"I built\" AI" } }
 
   # ── Press: "went mainstream" signal ────────────────────────────────────────────────────
   - { key: verge-ai, name: The Verge AI, kind: rss, platform: press, url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", focused: true }

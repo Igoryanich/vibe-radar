@@ -30,10 +30,12 @@ export function digestSelection(db: Db, cfg: Config) {
 export async function maybeDigest(db: Db, llm: Llm, cfg: Config, force = false) {
   const day = localDate(cfg.TIMEZONE);
   if (!force && localHour(cfg.TIMEZONE) < cfg.DIGEST_HOUR_LOCAL) return { skipped: "not yet" };
-  if (!force && db.kvGet("digest:last") === day) return { skipped: "already done today" };
+  // Tracked per mode: a test-mode digest must not stop the real one on the day publishing is switched on.
+  const doneKey = `digest:last:${cfg.DRY_RUN ? "dry-run" : "live"}`;
+  if (!force && db.kvGet(doneKey) === day) return { skipped: "already done today" };
   const { main, radar } = digestSelection(db, cfg);
   if (main.length < cfg.DIGEST_MIN_ITEMS) {
-    db.kvSet("digest:last", day);
+    db.kvSet(doneKey, day);
     return { skipped: `only ${main.length} projects ≥ ${cfg.DIGEST_THRESHOLD} today` };
   }
   const recentPost = (p: ProjectRow) =>
@@ -62,6 +64,6 @@ export async function maybeDigest(db: Db, llm: Llm, cfg: Config, force = false) 
      ON CONFLICT(key, channel) DO NOTHING`,
     `digest:${day}`, channel, "digest", res.text, JSON.stringify({ link_preview_options: { is_disabled: true } }), "pending", 100, nowIso(),
   );
-  db.kvSet("digest:last", day);
+  db.kvSet(doneKey, day);
   return { queued: true, items: selected.length, radar: onRadar.length };
 }

@@ -136,8 +136,8 @@ export async function writeChecked(
 export async function queuePosts(db: Db, llm: Llm, cfg: Config) {
   const today = localDate(cfg.TIMEZONE);
   const sentToday = db.all<{ created_at: string }>(
-    "SELECT created_at FROM publications WHERE kind IN ('post','update') AND status NOT IN ('failed','cancelled') AND created_at >= ?",
-    hoursAgo(26),
+    "SELECT created_at FROM publications WHERE kind IN ('post','update') AND channel = ? AND status NOT IN ('failed','cancelled') AND created_at >= ?",
+    cfg.DRY_RUN ? "dry-run" : cfg.TELEGRAM_CHANNEL_ID, hoursAgo(26),
   ).filter((r) => localDate(cfg.TIMEZONE, new Date(r.created_at)) === today).length;
   let room = Math.min(cfg.MAX_POSTS_PER_RUN, cfg.MAX_POSTS_PER_DAY - sentToday);
   const stats = { considered: 0, queued: 0, rejected: [] as string[], room };
@@ -155,7 +155,8 @@ export async function queuePosts(db: Db, llm: Llm, cfg: Config) {
     if (!d.ok) continue;
     if (d.update && !updateAllowed(db, p, cfg)) continue;
     const key = `post:${p.key}:${p.post_count}`;
-    if (db.get("SELECT 1 FROM publications WHERE key = ? AND status NOT IN ('failed','cancelled')", key)) continue;
+    // Test-mode drafts (channel 'dry-run') don't block the real post once DRY_RUN is switched off.
+    if (db.get("SELECT 1 FROM publications WHERE key = ? AND channel = ? AND status NOT IN ('failed','cancelled')", key, channel)) continue;
     const selected = selectedItem(db, p, cfg);
     let res: { text: string } | { error: string };
     try {

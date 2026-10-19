@@ -173,3 +173,15 @@ test("system prompt: every variable is filled", () => {
     assert.match(p, new RegExp(`Текущий режим: \\*\\*${mode}\\*\\*`));
   }
 });
+
+test("switching DRY_RUN off: projects drafted in test mode still get their real post", async () => {
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate()]);
+  assert.equal((await queuePosts(db, stubLlm([GOOD_POST]), cfg)).queued, 1);
+  const live = { ...cfg, DRY_RUN: false };
+  assert.equal((await queuePosts(db, stubLlm([GOOD_POST]), live)).queued, 1);
+  assert.deepEqual(
+    db.all<{ channel: string }>("SELECT channel FROM publications ORDER BY id").map((r) => r.channel),
+    ["dry-run", "@vibe_radar"],
+  );
+});

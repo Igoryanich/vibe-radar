@@ -5,7 +5,7 @@ import type { Config } from "../config.ts";
 import { type Db, json } from "../db.ts";
 import { errMsg, log } from "../log.ts";
 import { itemProjectKey, looksAiRelated, projectName, projectUrl } from "../projects.ts";
-import { canonicalUrl, hoursAgo, nowIso } from "../util.ts";
+import { canonicalUrl, hoursAgo, nowIso, sleep } from "../util.ts";
 
 // Platforms where an old item can suddenly take off (a repo from last year hitting Trending).
 const EVERGREEN: Platform[] = ["github", "huggingface"];
@@ -77,10 +77,17 @@ export async function collectAll(db: Db, cfg: Config, only: string[] = []) {
     "SELECT id, key, name, kind, url, platform, focused, config FROM sources WHERE enabled = 1 ORDER BY id",
   ).filter((s) => !only.length || only.includes(s.key));
   const stats = { sources: sources.length, items: 0, new: 0, errors: {} as Record<string, string> };
+  // Sources on the same host run one after another with a pause (Reddit answers 429 to parallel or rapid
+  // anonymous requests); different hosts run in parallel.
+  const byHost = new Map<string, SourceRow[]>();
+  for (const s of sources) {
+    const h = hostOf(s.url);
+    byHost.set(h, [...(byHost.get(h) ?? []), s]);
+  }
   await Promise.all(
-    // Small pool: be polite, but don't spend the whole run waiting on one slow host.
-    chunk(sources, 4).map(async (group) => {
-      for (const src of group) {
+    [...byHost.entries()].map(async ([host, group]) => {
+      for (const [i, src] of group.entries()) {
+        if (i > 0) await sleep(HOST_PAUSE_MS[host] ?? 1000);
         db.run("UPDATE sources SET last_fetch_at = ? WHERE id = ?", nowIso(), src.id);
         try {
           const raw = await collectors[src.kind].collect(src, cfg);
@@ -108,10 +115,14 @@ export async function collectAll(db: Db, cfg: Config, only: string[] = []) {
   return stats;
 }
 
-function chunk<T>(arr: T[], n: number): T[][] {
-  const out: T[][] = Array.from({ length: n }, () => []);
-  arr.forEach((x, i) => out[i % n].push(x));
-  return out.filter((g) => g.length);
+const HOST_PAUSE_MS: Record<string, number> = { "www.reddit.com": 7000, "reddit.com": 7000 };
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return url;
+  }
 }
 
 /**
