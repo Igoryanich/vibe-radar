@@ -28,6 +28,9 @@ check, queue) → `digest.ts` (daily, after DIGEST_HOUR_LOCAL) → `publish.ts` 
   bare URLs/domains in the visible text are checked too (`textcheck.bareLinks`), since Telegram auto-links them.
 - Post thresholds are re-checked in code (`postDecision`); a ≥7 post also needs `POST_MIN_PLATFORMS` (2) platforms; a repeat needs ≥3× growth or news after a cooldown.
 - Scam is never posted (model status `skip`); `needs_check` is never posted.
+- Concept: projects people built, not industry news. `scan.conceptSkip` forces `skip` for `category: big_tech`,
+  `angle: news` and repos/models of big companies (`projects.BIG_COMPANY_OWNERS`). Verdicts from an older
+  `SCAN_VERSION` are never acted on and are rescanned first.
 - Telegram delivery: `sending` is committed before the request; ambiguous outcomes become `uncertain`, never auto-retried.
 
 ## Commands

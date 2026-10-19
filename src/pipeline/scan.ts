@@ -4,11 +4,12 @@ import type { Db } from "../db.ts";
 import type { Llm } from "../llm.ts";
 import { log } from "../log.ts";
 import { projectHeadline } from "../metrics.ts";
+import { bigCompanyOwner } from "../projects.ts";
 import { systemPrompt } from "../prompt.ts";
 import { nowIso } from "../util.ts";
 import { buildCandidates, type ProjectInput } from "./candidates.ts";
 
-export const SCAN_VERSION = 2;
+export const SCAN_VERSION = 3;
 
 const STAGES = ["ранний сигнал", "взлетает", "мейнстрим"] as const;
 export type Stage = (typeof STAGES)[number];
@@ -24,6 +25,16 @@ const stage = z.string().transform((s, ctx) => {
 
 const CATEGORIES = ["indie", "opensource", "big_tech", "viral_demo", "vibe_tool"] as const;
 type Category = (typeof CATEGORIES)[number];
+
+const ANGLES = ["new_project", "growing", "new_feature", "news"] as const;
+type Angle = (typeof ANGLES)[number];
+
+const angle = z.string().transform((s, ctx) => {
+  const t = s.toLowerCase().trim().replace(/[\s-]+/g, "_");
+  if ((ANGLES as readonly string[]).includes(t)) return t as Angle;
+  ctx.addIssue({ code: "custom", message: `angle must be one of: ${ANGLES.join(" | ")}` });
+  return z.NEVER;
+});
 
 const evidence = z.object({
   source: z.string().catch(""),
@@ -44,6 +55,7 @@ export const candidateSchema = z.object({
     ctx.addIssue({ code: "custom", message: `category must be one of: ${CATEGORIES.join(" | ")}` });
     return z.NEVER;
   }),
+  angle,
   summary: z.string().catch(""),
   hype_score: z.coerce.number().transform((n) => Math.max(1, Math.min(10, Math.round(n)))),
   stage,
@@ -96,17 +108,31 @@ export function primaryKey(keys: string[]): string {
   return [...keys].sort((a, b) => rank(a) - rank(b))[0];
 }
 
+/**
+ * Channel concept, enforced in code: projects people built, not industry news. Big-company releases and
+ * stories about events (incidents, money) are skipped whatever the model's status says.
+ */
+export function conceptSkip(c: Candidate, keys: string[]): string | null {
+  if (c.category === "big_tech") return "релиз крупной компании — не тема канала";
+  const owner = keys.map(bigCompanyOwner).find(Boolean);
+  if (owner) return `репозиторий крупной компании (${owner}) — не тема канала`;
+  if (c.angle === "news") return "новость вокруг проекта, а не сам проект — не тема канала";
+  return null;
+}
+
 export function applyScan(db: Db, inputs: ProjectInput[], candidates: Candidate[]) {
   const known = new Map(inputs.map((p) => [p.project_key, p]));
   let judged = 0;
   let merged = 0;
   db.tx(() => {
-    for (const c of candidates) {
-      const keys = [...new Set(c.project_keys)].filter((k) => known.has(k));
+    for (const raw of candidates) {
+      const keys = [...new Set(raw.project_keys)].filter((k) => known.has(k));
       if (!keys.length) {
-        log.warn("scan returned a candidate with no known project_key", { name: c.name, keys: c.project_keys });
+        log.warn("scan returned a candidate with no known project_key", { name: raw.name, keys: raw.project_keys });
         continue;
       }
+      const off = conceptSkip(raw, keys);
+      const c: Candidate = off && raw.status !== "skip" ? { ...raw, status: "skip", skip_reason: off } : raw;
       const primary = primaryKey(keys);
       for (const k of keys) {
         if (k === primary) continue;

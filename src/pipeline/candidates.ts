@@ -4,6 +4,8 @@ import { type Db, json } from "../db.ts";
 import { growthRatio, itemDeltas, projectHeadline } from "../metrics.ts";
 import { nameMentioned, projectKeyOf } from "../projects.ts";
 import { hoursAgo } from "../util.ts";
+// Used at call time only, so the scan.ts ↔ candidates.ts import cycle is harmless.
+import { SCAN_VERSION } from "./scan.ts";
 
 interface ItemRow {
   id: number;
@@ -76,9 +78,9 @@ export function buildCandidates(db: Db, cfg: Config): ProjectInput[] {
   const since = hoursAgo(cfg.ITEM_WINDOW_HOURS);
   const projects = db.all<{
     key: string; url: string; last_scan_at: string | null; last_scan_metrics: string | null; hype_score: number | null;
-    stage: string | null; status: string; post_count: number; last_post_at: string | null; published_metrics: string | null;
+    stage: string | null; status: string; post_count: number; last_post_at: string | null; published_metrics: string | null; version: number | null;
   }>(
-    `SELECT key, url, last_scan_at, last_scan_metrics, hype_score, stage, status, post_count, last_post_at, published_metrics
+    `SELECT key, url, json_extract(scan, '$.version') AS version, last_scan_at, last_scan_metrics, hype_score, stage, status, post_count, last_post_at, published_metrics
      FROM projects WHERE merged_into IS NULL AND last_seen >= ?`,
     since,
   );
@@ -141,9 +143,11 @@ export function buildCandidates(db: Db, cfg: Config): ProjectInput[] {
     }
     const headline = projectHeadline(db, p.key);
     // Rescan throttle: a project already judged recently is shown again only if it grew noticeably.
-    if (p.last_scan_at && p.last_scan_at >= hoursAgo(cfg.RESCAN_HOURS) && growthRatio(json(p.last_scan_metrics, {}), headline) < cfg.RESCAN_GROWTH)
+    // A verdict from an older prompt version is redone at once.
+    const stale = p.last_scan_at !== null && p.version !== SCAN_VERSION;
+    if (!stale && p.last_scan_at && p.last_scan_at >= hoursAgo(cfg.RESCAN_HOURS) && growthRatio(json(p.last_scan_metrics, {}), headline) < cfg.RESCAN_GROWTH)
       continue;
-    if (p.status === "skip" && growthRatio(json(p.last_scan_metrics, {}), headline) < cfg.UPDATE_GROWTH) continue;
+    if (!stale && p.status === "skip" && growthRatio(json(p.last_scan_metrics, {}), headline) < cfg.UPDATE_GROWTH) continue;
     const pre = preScore(v);
     if (pre < 1) continue;
     out.push({

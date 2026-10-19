@@ -9,7 +9,7 @@ import { systemPrompt } from "../prompt.ts";
 import { checkPost, normalizeLink } from "../textcheck.ts";
 import { hoursAgo, localDate, nowIso } from "../util.ts";
 import { isAnomalous, type Velocity } from "./candidates.ts";
-import type { Candidate } from "./scan.ts";
+import { type Candidate, SCAN_VERSION } from "./scan.ts";
 
 export interface ProjectRow {
   id: number;
@@ -26,7 +26,12 @@ export interface ProjectRow {
   published_metrics: string | null;
 }
 
-type Scan = Candidate & { velocity?: Velocity };
+type Scan = Candidate & { velocity?: Velocity; version?: number };
+
+/** A verdict from an older prompt (other rules) is never acted on; the project is rescanned first. */
+export function currentScan(p: { scan: string | null }): boolean {
+  return json<{ version?: number } | null>(p.scan, null)?.version === SCAN_VERSION;
+}
 
 export const textSchema = z.object({ text: z.string().min(1) });
 
@@ -34,6 +39,7 @@ export const textSchema = z.object({ text: z.string().min(1) });
 export function postDecision(p: ProjectRow, cfg: Config): { ok: true; update: boolean } | { ok: false; reason: string } {
   const s = json<Scan | null>(p.scan, null);
   if (!s) return { ok: false, reason: "no scan" };
+  if (s.version !== SCAN_VERSION) return { ok: false, reason: `scan v${s.version ?? 0} is stale (v${SCAN_VERSION})` };
   if (s.status !== "publish_post") return { ok: false, reason: `status ${s.status}` };
   const v = s.velocity;
   // A 7+ means many platforms (prompt scale); a score from one GitHub list alone is not enough reach.

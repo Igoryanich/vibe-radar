@@ -74,6 +74,8 @@ sources:
     platform: huggingface
     url: https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=40
     focused: true
+    # Disabled 2026-10-20: trending models are almost all lab releases, which the channel no longer covers.
+    enabled: false
 
   # ── Product Hunt (Atom feed of the day's launches; no vote counts) ─────────────────────
   - key: producthunt

@@ -101,3 +101,20 @@ export function nameMentioned(name: string, text: string): boolean {
   const re = new RegExp(`(?:^|[^\\p{L}\\p{N}])${n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[^\\p{L}\\p{N}])`, "u");
   return re.test(t);
 }
+
+// GitHub / Hugging Face owners of big companies and AI labs: their releases are not the channel's topic
+// (the prompt says so too; this is the code-side net). Lowercase.
+const BIG_COMPANY_OWNERS = new Set([
+  "openai", "anthropics", "anthropic", "google", "google-deepmind", "google-gemini", "googleapis", "googlecloudplatform",
+  "deepmind", "meta-llama", "facebook", "facebookresearch", "meta", "microsoft", "azure", "nvidia", "nvlabs", "apple",
+  "amazon", "aws", "awslabs", "xai-org", "mistralai", "deepseek-ai", "qwen", "qwenlm", "alibaba", "alibaba-nlp",
+  "bytedance", "bytedance-seed", "moonshotai", "zai-org", "thudm", "tencent", "tencent-hunyuan", "baidu", "paddlepaddle",
+  "minimaxai", "minimax-ai", "huggingface", "ibm", "ibm-granite", "salesforce", "stabilityai", "black-forest-labs",
+  "cohere", "cohereforai", "ai21labs", "01-ai", "stepfun-ai", "xiaomi", "xiaomimimo", "openbmb", "allenai", "github",
+]);
+
+/** The big-company owner of a gh:/hf: project key, or null. */
+export function bigCompanyOwner(key: string): string | null {
+  const m = /^(?:gh|hf):(?:spaces\/)?([^/]+)\//.exec(key);
+  return m && BIG_COMPANY_OWNERS.has(m[1]) ? m[1] : null;
+}

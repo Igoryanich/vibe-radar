@@ -8,7 +8,7 @@ import { buildCandidates } from "../src/pipeline/candidates.ts";
 import { storeItem } from "../src/pipeline/collect.ts";
 import { maybeDigest } from "../src/pipeline/digest.ts";
 import { postDecision, queuePosts, type ProjectRow, updateAllowed } from "../src/pipeline/editorial.ts";
-import { applyScan, type Candidate, candidateSchema } from "../src/pipeline/scan.ts";
+import { applyScan, type Candidate, candidateSchema, conceptSkip, SCAN_VERSION } from "../src/pipeline/scan.ts";
 import { systemPrompt } from "../src/prompt.ts";
 
 const H = 3600_000;
@@ -50,7 +50,7 @@ function setup() {
 
 const candidate = (over: Partial<Candidate> = {}): Candidate => ({
   project_keys: ["gh:bilawalsidhu/gods-eye-view"], name: "God's Eye View", url: "https://github.com/bilawalsidhu/gods-eye-view",
-  author: "Bilawal Sidhu", category: "opensource", summary: "Шпионский спутник в браузере", hype_score: 8, stage: "взлетает",
+  author: "Bilawal Sidhu", category: "opensource", angle: "new_project", summary: "Шпионский спутник в браузере", hype_score: 8, stage: "взлетает",
   evidence: [], first_seen_at: "", source_of_first_signal: "github", why_viral: "вау-эффект", risks: "", availability: "доступно",
   media_suggestion: "", is_update: false, update_reason: "", status: "publish_post", skip_reason: "", ...over,
 });
@@ -111,12 +111,13 @@ test("post thresholds are enforced in code, not by the model's word", () => {
   const base: ProjectRow = { id: 1, key: "gh:a/b", name: "b", url: "https://github.com/a/b", scan: null, hype_score: 6, stage: "ранний сигнал", status: "publish_post", post_count: 0, last_post_at: null, last_post_message_id: null, published_metrics: null };
   const slow = { stars_24h: 200, stars_week: 0, hn_points: 0, reddit_upvotes: 0, hf_likes_24h: 0, platforms: 1, mentions: 0, measured: true };
   const fast = { ...slow, stars_24h: 1500 };
-  const row = (c: Partial<Candidate>, velocity = slow, extra: Partial<ProjectRow> = {}) => ({ ...base, ...extra, scan: JSON.stringify({ ...candidate(c), velocity }) });
+  const row = (c: Partial<Candidate>, velocity = slow, extra: Partial<ProjectRow> = {}, version = SCAN_VERSION) => ({ ...base, ...extra, scan: JSON.stringify({ ...candidate(c), velocity, version }) });
   assert.equal(postDecision(row({ hype_score: 6, stage: "ранний сигнал" }), cfg).ok, false);
   assert.equal(postDecision(row({ hype_score: 6, stage: "ранний сигнал" }, fast), cfg).ok, true);
   assert.equal(postDecision(row({ hype_score: 6, stage: "взлетает" }, fast), cfg).ok, false);
   assert.equal(postDecision(row({ hype_score: 9, status: "digest_only" }), cfg).ok, false);
   const wide = { ...slow, platforms: 2 };
+  assert.equal(postDecision(row({ hype_score: 9 }, wide, {}, SCAN_VERSION - 1), cfg).ok, false, "a verdict from an older prompt is not acted on");
   assert.equal(postDecision(row({ hype_score: 8 }), cfg).ok, false, "a 7+ seen on one platform only lacks reach");
   assert.deepEqual(postDecision(row({ hype_score: 8 }, wide), cfg), { ok: true, update: false });
   assert.equal(postDecision(row({ hype_score: 8 }, wide, { post_count: 1 }), cfg).ok, false, "repeat without news");
@@ -194,4 +195,27 @@ test("scan schema: category is required and normalised, never silently defaulted
   assert.equal(candidateSchema.parse({ ...base, category: "Vibe Tool" }).category, "vibe_tool");
   assert.equal(candidateSchema.safeParse({ ...base, category: "crypto" }).success, false);
   assert.equal(candidateSchema.safeParse({ ...base, category: undefined }).success, false);
+});
+
+test("concept: big-company releases and news about a project are skipped in code", () => {
+  const keys = ["gh:bilawalsidhu/gods-eye-view"];
+  assert.equal(conceptSkip(candidate(), keys), null);
+  assert.ok(conceptSkip(candidate({ category: "big_tech" }), keys));
+  assert.ok(conceptSkip(candidate({ angle: "news" }), keys), "an incident story is not a project post");
+  assert.ok(conceptSkip(candidate(), ["hf:deepseek-ai/deepseek-v4.1-flash"]), "lab weights on HF");
+  assert.ok(conceptSkip(candidate(), ["gh:anthropics/claude-plugins-official"]));
+  assert.equal(conceptSkip(candidate({ angle: "new_feature" }), ["gh:anomalyco/opencode"]), null, "a big new feature of a known project is fine");
+
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate({ angle: "news", status: "publish_post" })]);
+  const p = db.get<{ status: string }>("SELECT status FROM projects WHERE key = 'gh:bilawalsidhu/gods-eye-view'")!;
+  assert.equal(p.status, "skip");
+});
+
+test("a project judged by an older prompt version is rescanned at once", () => {
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate()]);
+  assert.equal(buildCandidates(db, cfg).length, 0);
+  db.run("UPDATE projects SET scan = json_set(scan, '$.version', ?) WHERE key = 'gh:bilawalsidhu/gods-eye-view'", SCAN_VERSION - 1);
+  assert.equal(buildCandidates(db, cfg).length, 1);
 });

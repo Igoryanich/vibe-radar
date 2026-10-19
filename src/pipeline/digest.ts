@@ -2,7 +2,7 @@ import type { Config } from "../config.ts";
 import type { Db } from "../db.ts";
 import type { Llm } from "../llm.ts";
 import { hoursAgo, localDate, localHour, nowIso } from "../util.ts";
-import { allowedLinks, channelPostLink, type ProjectRow, selectedItem, trustedFacts, writeChecked } from "./editorial.ts";
+import { allowedLinks, channelPostLink, currentScan, type ProjectRow, selectedItem, trustedFacts, writeChecked } from "./editorial.ts";
 
 const COLS = "id, key, name, url, scan, hype_score, stage, status, post_count, last_post_at, last_post_message_id, published_metrics";
 
@@ -12,8 +12,8 @@ export function digestSelection(db: Db, cfg: Config) {
   const main = db.all<ProjectRow>(
     `SELECT ${COLS} FROM projects WHERE merged_into IS NULL AND last_scan_at >= ? AND status IN ('publish_post','digest_only')
        AND hype_score >= ? ORDER BY hype_score DESC, last_scan_at DESC LIMIT ?`,
-    since, cfg.DIGEST_THRESHOLD, cfg.DIGEST_MAX_ITEMS,
-  );
+    since, cfg.DIGEST_THRESHOLD, cfg.DIGEST_MAX_ITEMS * 3,
+  ).filter(currentScan).slice(0, cfg.DIGEST_MAX_ITEMS);
   const ids = new Set(main.map((p) => p.id));
   const radar = db
     .all<ProjectRow>(
@@ -21,7 +21,7 @@ export function digestSelection(db: Db, cfg: Config) {
          AND stage = 'ранний сигнал' AND hype_score >= 3 ORDER BY hype_score DESC, last_scan_at DESC LIMIT 6`,
       since,
     )
-    .filter((p) => !ids.has(p.id))
+    .filter((p) => !ids.has(p.id) && currentScan(p))
     .slice(0, 3);
   return { main, radar };
 }
