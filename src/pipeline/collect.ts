@@ -77,8 +77,8 @@ export async function collectAll(db: Db, cfg: Config, only: string[] = []) {
     "SELECT id, key, name, kind, url, platform, focused, config FROM sources WHERE enabled = 1 ORDER BY id",
   ).filter((s) => !only.length || only.includes(s.key));
   const stats = { sources: sources.length, items: 0, new: 0, errors: {} as Record<string, string> };
-  // Sources on the same host run one after another with a pause (Reddit answers 429 to parallel or rapid
-  // anonymous requests); different hosts run in parallel.
+  // Sources on the same host run one after another with a pause (Reddit's anonymous quota is about one
+  // request per minute: x-ratelimit-remaining 0, reset ~60 s); different hosts run in parallel.
   const byHost = new Map<string, SourceRow[]>();
   for (const s of sources) {
     const h = hostOf(s.url);
@@ -115,7 +115,7 @@ export async function collectAll(db: Db, cfg: Config, only: string[] = []) {
   return stats;
 }
 
-const HOST_PAUSE_MS: Record<string, number> = { "www.reddit.com": 7000, "reddit.com": 7000 };
+const HOST_PAUSE_MS: Record<string, number> = { "www.reddit.com": 65_000, "reddit.com": 65_000 };
 
 function hostOf(url: string): string {
   try {

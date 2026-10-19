@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseTrending } from "../src/collectors/github.ts";
-import { parseHf, parseHn, parseReddit } from "../src/collectors/social.ts";
+import { parseHf, parseHn, parseReddit, parseRedditFeed } from "../src/collectors/social.ts";
 import { computeDelta, growthRatio } from "../src/metrics.ts";
 import { itemProjectKey, looksAiRelated, nameMentioned, projectKeyOf } from "../src/projects.ts";
 import { bareLinks, checkPost, cyrillicShare, figuresIn, htmlProblems, unknownFigures, visibleLength } from "../src/textcheck.ts";
@@ -93,10 +93,25 @@ test("HN, Reddit and HF parsers keep counters and outbound links", () => {
   assert.equal(rd.length, 1);
   assert.deepEqual(rd[0].links, ["https://github.com/me/x"]);
   assert.equal(rd[0].metrics.upvotes, 1200);
+  assert.match(rd[0].text, /^r\/vibecoding: repo:/);
   const hf = parseHf(JSON.stringify([{ id: "owner/demo", likes: 683, trendingScore: 153, createdAt: "2026-07-15T00:00:00Z", sdk: "gradio", tags: ["region:us", "mcp-server"] }]), "spaces");
   assert.equal(hf[0].url, "https://huggingface.co/spaces/owner/demo");
   assert.equal(hf[0].metrics.likes, 683);
   assert.doesNotMatch(hf[0].text, /region:/);
+});
+
+test("Reddit multireddit RSS keeps the subreddit and outbound links", async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom"><title>top</title>
+<entry><author><name>/u/me</name></author><category term="ClaudeAI" label="r/ClaudeAI"/>
+<content type="html">&lt;div class=&quot;md&quot;&gt;&lt;p&gt;I built a thing: &lt;a href=&quot;https://github.com/me/thing&quot;&gt;repo&lt;/a&gt;&lt;/p&gt;&lt;/div&gt; submitted by &lt;a href=&quot;https://www.reddit.com/user/me&quot;&gt;/u/me&lt;/a&gt;</content>
+<id>t3_abc</id><link href="https://www.reddit.com/r/ClaudeAI/comments/abc/i_built_a_thing/"/><updated>2026-10-19T08:00:00+00:00</updated><title>I built a thing</title></entry>
+</feed>`;
+  const items = await parseRedditFeed(xml);
+  assert.equal(items.length, 1);
+  assert.equal(items[0].url, "https://www.reddit.com/r/ClaudeAI/comments/abc/i_built_a_thing/");
+  assert.match(items[0].text, /^r\/ClaudeAI: I built a thing/);
+  assert.ok(items[0].links.includes("https://github.com/me/thing"));
+  assert.deepEqual(items[0].metrics, {});
 });
 
 test("HTML checks: whitelist, balance, escaping, Markdown", () => {

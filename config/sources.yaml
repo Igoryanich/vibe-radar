@@ -50,16 +50,11 @@ sources:
     url: https://hn.algolia.com/api/v1/search?tags=front_page
     config: { min_points: 50 }
 
-  # ── Reddit (top of the day; JSON with upvotes, RSS fallback) ───────────────────────────
-  - { key: r-vibecoding, name: r/vibecoding, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/vibecoding/top.json?t=day&limit=30", focused: true }
-  - { key: r-sideproject, name: r/SideProject, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/SideProject/top.json?t=day&limit=30" }
-  - { key: r-localllama, name: r/LocalLLaMA, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/LocalLLaMA/top.json?t=day&limit=30", focused: true }
-  - { key: r-singularity, name: r/singularity, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/singularity/top.json?t=day&limit=30", focused: true }
-  - { key: r-chatgpt, name: r/ChatGPT, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/ChatGPT/top.json?t=day&limit=30", focused: true }
-  - { key: r-claudeai, name: r/ClaudeAI, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/ClaudeAI/top.json?t=day&limit=30", focused: true }
-  - { key: r-cursor, name: r/cursor, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/cursor/top.json?t=day&limit=30", focused: true }
-  - { key: r-artificial, name: r/artificial, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/artificial/top.json?t=day&limit=30", focused: true }
-  - { key: r-stablediffusion, name: r/StableDiffusion, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/StableDiffusion/top.json?t=day&limit=30", focused: true }
+  # ── Reddit: anonymous JSON is blocked and RSS allows ~1 request/minute, so few multireddit feeds ──
+  # Small vibe-coding subs get their own feed: in one big multireddit the large subs crowd them out of the top 100.
+  - { key: r-vibe-multi, name: "r/vibecoding+cursor+ClaudeAI", kind: reddit, platform: reddit, url: "https://www.reddit.com/r/vibecoding+cursor+ClaudeAI/top/.rss?t=day&limit=100", focused: true }
+  - { key: r-ai-multi, name: "r/LocalLLaMA+singularity+ChatGPT+artificial+StableDiffusion", kind: reddit, platform: reddit, url: "https://www.reddit.com/r/LocalLLaMA+singularity+ChatGPT+artificial+StableDiffusion/top/.rss?t=day&limit=100", focused: true }
+  - { key: r-sideproject, name: r/SideProject, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/SideProject/top/.rss?t=day&limit=100" }
 
   # ── Hugging Face trending ──────────────────────────────────────────────────────────────
   - key: hf-spaces

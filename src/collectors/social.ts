@@ -51,7 +51,10 @@ export const hnCollector: Collector = {
   },
 };
 
-// ── Reddit (public JSON with upvotes; RSS fallback without counters when JSON is blocked) ─────
+// ── Reddit ───────────────────────────────────────────────────────────────────────────────────
+// Anonymous JSON (with upvotes) is refused (403/429) even from home IPs now; RSS still works, but the
+// anonymous quota is ~1 request per minute. So sources are a few multireddit RSS feeds (r/a+b+c) with a
+// 65 s pause between them (collect.ts). A .json URL is still tried first, with RSS as the fallback.
 
 const redditSchema = z.object({
   data: z.object({
@@ -88,7 +91,7 @@ export function parseReddit(jsonText: string): RawItem[] {
     return [{
       url: own,
       title: d.title,
-      text: (d.selftext ?? "").replace(/\s+/g, " ").trim().slice(0, 2000),
+      text: withSubreddit(own, (d.selftext ?? "").replace(/\s+/g, " ").trim().slice(0, 2000)),
       author: d.author,
       link: dest && !/reddit\.com|redd\.it|imgur\.com/.test(dest) ? dest : undefined,
       links,
@@ -98,18 +101,32 @@ export function parseReddit(jsonText: string): RawItem[] {
   });
 }
 
+/** "r/Sub: text" — a multireddit mixes subreddits, and the subreddit tells the model a lot. */
+function withSubreddit(permalink: string, text: string): string {
+  const sub = /reddit\.com\/r\/([^/]+)\//.exec(permalink)?.[1];
+  return sub ? `r/${sub}: ${text}`.trim() : text;
+}
+
+/** Reddit RSS (Atom): no counters — a coverage signal only. */
+export async function parseRedditFeed(xml: string): Promise<RawItem[]> {
+  return (await parseFeed(xml, 100)).map((it) => ({ ...it, text: withSubreddit(it.url, it.text).slice(0, 3000) }));
+}
+
 export const redditCollector: Collector = {
   async collect(source) {
+    if (!/\.json$/.test(new URL(source.url).pathname)) {
+      const { text } = await fetchText(source.url, { headers: { Accept: "application/atom+xml, application/xml, */*" } });
+      return parseRedditFeed(text);
+    }
     try {
       const { text } = await fetchText(source.url, { headers: { Accept: "application/json" } });
       return parseReddit(text);
     } catch (e) {
-      // Reddit often refuses JSON to datacenter IPs but still serves RSS (no counters — coverage signal only).
       const rss = source.url.replace(/\/(top|hot|new)\.json/, "/$1/.rss");
       if (rss === source.url) throw e;
       await new Promise((r) => setTimeout(r, 4000));
       const { text } = await fetchText(rss);
-      return parseFeed(text, 30);
+      return parseRedditFeed(text);
     }
   },
 };
