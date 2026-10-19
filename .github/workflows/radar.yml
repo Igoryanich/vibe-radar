@@ -8,7 +8,7 @@ name: radar
 #
 # Repository secrets:   GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID   (optional: GEMINI_PAID_API_KEY)
 # Repository variables: DRY_RUN (default true — set to false to start posting), CHANNEL_NAME,
-#                       PAID_DAILY_BUDGET_EUR, MAX_POSTS_PER_DAY
+#                       PAID_DAILY_BUDGET_EUR, MAX_POSTS_PER_DAY, POST_MIN_PLATFORMS (default 2)
 
 on:
   schedule:
@@ -34,6 +34,7 @@ jobs:
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || '' }}
       MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '' }}
+      POST_MIN_PLATFORMS: ${{ vars.POST_MIN_PLATFORMS || '' }}
       DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
       # The workflow's own token: higher GitHub Search/API limits for the collectors.
       GITHUB_TOKEN: ${{ github.token }}
