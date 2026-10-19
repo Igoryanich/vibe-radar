@@ -1,0 +1,97 @@
+# Source registry. Edit freely: the file is synced into the DB on every run;
+# a source removed here is disabled (its history is kept).
+#
+# kind      — collector: github_trending | github_search | hn | reddit | huggingface | rss | telegram | bluesky
+# platform  — where it is from (shown to the model): github | hn | reddit | huggingface | producthunt | bluesky | press | telegram | blog
+# focused   — true = an AI-only source, no keyword pre-filter; false = general source, only AI-related items are kept
+#
+# Not collected (no free, stable API): X/Twitter, TikTok, Instagram, YouTube view counts, Discord.
+# Their reach shows up indirectly: press and Bluesky mentions, Reddit threads linking to the video.
+
+sources:
+  # ── GitHub: the earliest and best-measured signal ──────────────────────────────────────
+  - key: gh-trending-daily
+    name: GitHub Trending (daily)
+    kind: github_trending
+    platform: github
+    url: https://github.com/trending?since=daily
+  - key: gh-trending-weekly
+    name: GitHub Trending (weekly)
+    kind: github_trending
+    platform: github
+    url: https://github.com/trending?since=weekly
+  - key: gh-trending-python-daily
+    name: GitHub Trending Python (daily)
+    kind: github_trending
+    platform: github
+    url: https://github.com/trending/python?since=daily
+  - key: gh-trending-ts-daily
+    name: GitHub Trending TypeScript (daily)
+    kind: github_trending
+    platform: github
+    url: https://github.com/trending/typescript?since=daily
+  - key: gh-young-repos
+    name: GitHub young repos by stars (Search API)
+    kind: github_search
+    platform: github
+    url: https://api.github.com/search/repositories
+
+  # ── Hacker News (Algolia API: points + comments) ───────────────────────────────────────
+  - key: hn-show
+    name: Show HN
+    kind: hn
+    platform: hn
+    url: https://hn.algolia.com/api/v1/search?tags=show_hn
+    config: { min_points: 15 }
+  - key: hn-front
+    name: HN front page
+    kind: hn
+    platform: hn
+    url: https://hn.algolia.com/api/v1/search?tags=front_page
+    config: { min_points: 50 }
+
+  # ── Reddit (top of the day; JSON with upvotes, RSS fallback) ───────────────────────────
+  - { key: r-vibecoding, name: r/vibecoding, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/vibecoding/top.json?t=day&limit=30", focused: true }
+  - { key: r-sideproject, name: r/SideProject, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/SideProject/top.json?t=day&limit=30" }
+  - { key: r-localllama, name: r/LocalLLaMA, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/LocalLLaMA/top.json?t=day&limit=30", focused: true }
+  - { key: r-singularity, name: r/singularity, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/singularity/top.json?t=day&limit=30", focused: true }
+  - { key: r-chatgpt, name: r/ChatGPT, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/ChatGPT/top.json?t=day&limit=30", focused: true }
+  - { key: r-claudeai, name: r/ClaudeAI, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/ClaudeAI/top.json?t=day&limit=30", focused: true }
+  - { key: r-cursor, name: r/cursor, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/cursor/top.json?t=day&limit=30", focused: true }
+  - { key: r-artificial, name: r/artificial, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/artificial/top.json?t=day&limit=30", focused: true }
+  - { key: r-stablediffusion, name: r/StableDiffusion, kind: reddit, platform: reddit, url: "https://www.reddit.com/r/StableDiffusion/top.json?t=day&limit=30", focused: true }
+
+  # ── Hugging Face trending ──────────────────────────────────────────────────────────────
+  - key: hf-spaces
+    name: Hugging Face trending Spaces
+    kind: huggingface
+    platform: huggingface
+    url: https://huggingface.co/api/spaces?sort=trendingScore&direction=-1&limit=40
+    focused: true
+  - key: hf-models
+    name: Hugging Face trending models
+    kind: huggingface
+    platform: huggingface
+    url: https://huggingface.co/api/models?sort=trendingScore&direction=-1&limit=40
+    focused: true
+
+  # ── Product Hunt (Atom feed of the day's launches; no vote counts) ─────────────────────
+  - key: producthunt
+    name: Product Hunt
+    kind: rss
+    platform: producthunt
+    url: https://www.producthunt.com/feed
+
+  # ── Bluesky search (likes/reposts; mass-reach signal) ─────────────────────────────────
+  - { key: bsky-vibecoding, name: Bluesky «vibe coding», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", focused: true, config: { query: "vibe coding" } }
+  - { key: bsky-ibuilt, name: Bluesky «I built AI», kind: bluesky, platform: bluesky, url: "https://bsky.app/search", config: { query: "\"I built\" AI" } }
+
+  # ── Press: "went mainstream" signal ────────────────────────────────────────────────────
+  - { key: verge-ai, name: The Verge AI, kind: rss, platform: press, url: "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml", focused: true }
+  - { key: techcrunch-ai, name: TechCrunch AI, kind: rss, platform: press, url: "https://techcrunch.com/category/artificial-intelligence/feed/", focused: true }
+  - { key: ars-ai, name: Ars Technica AI, kind: rss, platform: press, url: "https://arstechnica.com/ai/feed/", focused: true }
+  - { key: 404media, name: 404 Media, kind: rss, platform: press, url: "https://www.404media.co/rss/" }
+  - { key: simonw, name: Simon Willison, kind: rss, platform: blog, url: "https://simonwillison.net/atom/everything/", focused: true }
+
+  # ── Telegram channels (public web preview t.me/s/<name>) — add your own:
+  # - { key: tg-example, name: Example channel, kind: telegram, platform: telegram, url: "https://t.me/example", focused: true }

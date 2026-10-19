@@ -1,0 +1,80 @@
+name: radar
+
+# Vibe Radar: hourly full cycle (collect → measure → AI scan → posts → digest after 21:00 → publish).
+# Hourly matters: 24h/72h velocity is computed from our own snapshots of star/point/upvote counters.
+# State (SQLite) lives on the `state` branch as a single force-pushed commit, so history never grows.
+# Keep the repo public: Actions minutes are then free and unlimited (a private repo shares 2000 min/month
+# with your other private repos).
+#
+# Repository secrets:   GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID   (optional: GEMINI_PAID_API_KEY)
+# Repository variables: DRY_RUN (default true — set to false to start posting), CHANNEL_NAME,
+#                       PAID_DAILY_BUDGET_EUR, MAX_POSTS_PER_DAY
+
+on:
+  schedule:
+    - cron: "12 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: radar-state   # one writer to the state branch at a time
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_PAID_API_KEY: ${{ secrets.GEMINI_PAID_API_KEY }}
+      PAID_DAILY_BUDGET_EUR: ${{ vars.PAID_DAILY_BUDGET_EUR || '0.24' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      CHANNEL_NAME: ${{ vars.CHANNEL_NAME || '' }}
+      MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '' }}
+      DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
+      # The workflow's own token: higher GitHub Search/API limits for the collectors.
+      GITHUB_TOKEN: ${{ github.token }}
+      DATABASE_PATH: data/radar.db
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci --omit=dev
+
+      - name: Restore state
+        run: |
+          mkdir -p data
+          if git fetch --depth=1 origin state 2>/dev/null; then
+            git show origin/state:radar.db > data/radar.db
+            echo "restored $(du -h data/radar.db | cut -f1)"
+          else
+            echo "no state branch yet — starting fresh"
+          fi
+
+      - name: Cycle
+        run: node src/cli.ts cycle
+
+      - name: Latest texts (log)
+        if: always()
+        run: node src/cli.ts posts 3 || true
+
+      - name: Save state
+        if: always()
+        run: |
+          [ -f data/radar.db ] || exit 0
+          tmp=$(mktemp -d)
+          cp data/radar.db "$tmp/"
+          cd "$tmp"
+          git init -q -b state
+          git config user.name "radar-bot"
+          git config user.email "radar-bot@users.noreply.github.com"
+          git add -A
+          git commit -q -m "state $(date -u +%FT%TZ) [skip ci]"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state
