@@ -40,7 +40,8 @@ export function postDecision(p: ProjectRow, cfg: Config): { ok: true; update: bo
   const s = json<Scan | null>(p.scan, null);
   if (!s) return { ok: false, reason: "no scan" };
   if (s.version !== SCAN_VERSION) return { ok: false, reason: `scan v${s.version ?? 0} is stale (v${SCAN_VERSION})` };
-  if (s.status !== "publish_post") return { ok: false, reason: `status ${s.status}` };
+  // The model scores; the code applies the threshold. Its post/digest choice is advisory, skip/needs_check is final.
+  if (s.status !== "publish_post" && s.status !== "digest_only") return { ok: false, reason: `status ${s.status}` };
   const v = s.velocity;
   // A 7+ means many platforms (prompt scale); a score from one GitHub list alone is not enough reach.
   const strong = s.hype_score >= cfg.POST_THRESHOLD && !!v && v.platforms >= cfg.POST_MIN_PLATFORMS;
@@ -151,8 +152,8 @@ export async function queuePosts(db: Db, llm: Llm, cfg: Config) {
   if (room <= 0) return stats;
   const rows = db.all<ProjectRow>(
     `SELECT id, key, name, url, scan, hype_score, stage, status, post_count, last_post_at, last_post_message_id, published_metrics
-     FROM projects WHERE merged_into IS NULL AND status = 'publish_post' AND last_scan_at >= ? ORDER BY hype_score DESC, last_scan_at DESC`,
-    hoursAgo(cfg.RESCAN_HOURS),
+     FROM projects WHERE merged_into IS NULL AND status IN ('publish_post','digest_only') AND hype_score >= ? AND last_scan_at >= ? ORDER BY hype_score DESC, last_scan_at DESC`,
+    Math.min(cfg.POST_THRESHOLD, cfg.EARLY_POST_THRESHOLD), hoursAgo(cfg.RESCAN_HOURS),
   );
   const channel = cfg.DRY_RUN ? "dry-run" : cfg.TELEGRAM_CHANNEL_ID;
   for (const p of rows) {

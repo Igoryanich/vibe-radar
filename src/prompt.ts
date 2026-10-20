@@ -23,6 +23,7 @@ export function systemPrompt(cfg: Config, mode: Mode, now = new Date()): string 
     TIMEZONE: cfg.TIMEZONE,
     REFERENCE_DESCRIPTION: read(cfg.REFERENCE_FILE) || "(описание эталона не задано)",
     SCORE_ANCHORS: read(cfg.ANCHORS_FILE) ? `Опорные примеры из истории канала:\n${read(cfg.ANCHORS_FILE)}` : "",
+    POST_THRESHOLD: String(cfg.POST_THRESHOLD),
     POST_MAX_CHARS: String(cfg.POST_MAX_CHARS),
     DIGEST_MAX_CHARS: String(cfg.DIGEST_MAX_CHARS),
     DIGEST_TIME: `${String(cfg.DIGEST_HOUR_LOCAL).padStart(2, "0")}:00, ${cfg.TIMEZONE}`,

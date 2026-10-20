@@ -115,7 +115,9 @@ test("post thresholds are enforced in code, not by the model's word", () => {
   assert.equal(postDecision(row({ hype_score: 6, stage: "ранний сигнал" }), cfg).ok, false);
   assert.equal(postDecision(row({ hype_score: 6, stage: "ранний сигнал" }, fast), cfg).ok, true);
   assert.equal(postDecision(row({ hype_score: 6, stage: "взлетает" }, fast), cfg).ok, false);
-  assert.equal(postDecision(row({ hype_score: 9, status: "digest_only" }), cfg).ok, false);
+  assert.equal(postDecision(row({ hype_score: 9, status: "needs_check" }, { ...slow, platforms: 2 }), cfg).ok, false);
+  assert.equal(postDecision(row({ hype_score: 9, status: "skip" }, { ...slow, platforms: 2 }), cfg).ok, false);
+  assert.equal(postDecision(row({ hype_score: 7, status: "digest_only" }, { ...slow, platforms: 2 }), cfg).ok, true, "the threshold is the code's, not the model's status");
   const wide = { ...slow, platforms: 2 };
   assert.equal(postDecision(row({ hype_score: 9 }, wide, {}, SCAN_VERSION - 1), cfg).ok, false, "a verdict from an older prompt is not acted on");
   assert.equal(postDecision(row({ hype_score: 8 }), cfg).ok, false, "a 7+ seen on one platform only lacks reach");

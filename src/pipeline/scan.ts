@@ -9,7 +9,7 @@ import { systemPrompt } from "../prompt.ts";
 import { nowIso } from "../util.ts";
 import { buildCandidates, type ProjectInput } from "./candidates.ts";
 
-export const SCAN_VERSION = 3;
+export const SCAN_VERSION = 4;
 
 const STAGES = ["ранний сигнал", "взлетает", "мейнстрим"] as const;
 export type Stage = (typeof STAGES)[number];
