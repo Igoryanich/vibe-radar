@@ -39,6 +39,7 @@ jobs:
       MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '' }}
       POST_MIN_PLATFORMS: ${{ vars.POST_MIN_PLATFORMS || '' }}
       POST_THRESHOLD: ${{ vars.POST_THRESHOLD || '' }}
+      MIN_POST_GAP_MINUTES: ${{ vars.MIN_POST_GAP_MINUTES || '' }}
       DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
       # The workflow's own token: higher GitHub Search/API limits for the collectors.
       GITHUB_TOKEN: ${{ github.token }}

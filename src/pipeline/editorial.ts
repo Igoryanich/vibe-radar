@@ -141,13 +141,19 @@ export async function writeChecked(
 }
 
 /** Choose this run's posts, write them, queue them. */
-export async function queuePosts(db: Db, llm: Llm, cfg: Config) {
-  const today = localDate(cfg.TIMEZONE);
-  const sentToday = db.all<{ created_at: string }>(
+export async function queuePosts(db: Db, llm: Llm, cfg: Config, now = Date.now()) {
+  const today = localDate(cfg.TIMEZONE, new Date(now));
+  const recent = db.all<{ created_at: string }>(
     "SELECT created_at FROM publications WHERE kind IN ('post','update') AND channel = ? AND status NOT IN ('failed','cancelled') AND created_at >= ?",
-    cfg.DRY_RUN ? "dry-run" : cfg.TELEGRAM_CHANNEL_ID, hoursAgo(26),
-  ).filter((r) => localDate(cfg.TIMEZONE, new Date(r.created_at)) === today).length;
+    cfg.DRY_RUN ? "dry-run" : cfg.TELEGRAM_CHANNEL_ID, new Date(now - 26 * 3600_000).toISOString(),
+  );
+  const sentToday = recent.filter((r) => localDate(cfg.TIMEZONE, new Date(r.created_at)) === today).length;
   let room = Math.min(cfg.MAX_POSTS_PER_RUN, cfg.MAX_POSTS_PER_DAY - sentToday);
+  // Spread the day's posts: at most one per MIN_POST_GAP_MINUTES instead of bursts that use up the daily cap early.
+  if (cfg.MIN_POST_GAP_MINUTES > 0) {
+    const last = Math.max(0, ...recent.map((r) => Date.parse(r.created_at)));
+    room = now - last < cfg.MIN_POST_GAP_MINUTES * 60_000 ? 0 : Math.min(room, 1);
+  }
   const stats = { considered: 0, queued: 0, rejected: [] as string[], room };
   if (room <= 0) return stats;
   const rows = db.all<ProjectRow>(

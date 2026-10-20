@@ -221,3 +221,16 @@ test("a project judged by an older prompt version is rescanned at once", () => {
   db.run("UPDATE projects SET scan = json_set(scan, '$.version', ?) WHERE key = 'gh:bilawalsidhu/gods-eye-view'", SCAN_VERSION - 1);
   assert.equal(buildCandidates(db, cfg).length, 1);
 });
+
+test("posts are spread out: one per run and none within MIN_POST_GAP_MINUTES of the last", async () => {
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate()]);
+  const gap = { ...cfg, MIN_POST_GAP_MINUTES: 60 };
+  db.run("INSERT INTO publications(key, channel, kind, text, status, priority, created_at) VALUES('post:x:0', 'dry-run', 'post', 't', 'sent', 0, ?)", ago(0.5));
+  const early = await queuePosts(db, stubLlm([GOOD_POST]), gap);
+  assert.equal(early.room, 0, "30 min after the last post → wait");
+  assert.equal(early.queued, 0);
+  const later = await queuePosts(db, stubLlm([GOOD_POST]), gap, Date.now() + 31 * 60_000);
+  assert.equal(later.room, 1, "an hour later → one post, not a burst");
+  assert.equal(later.queued, 1);
+});

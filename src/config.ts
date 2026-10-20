@@ -78,6 +78,8 @@ const schema = z.object({
   UPDATE_COOLDOWN_HOURS: int(48),
   MAX_POSTS_PER_RUN: int(2),
   MAX_POSTS_PER_DAY: int(6),
+  // Minimum pause between two posts (0 = off); with it, a run queues at most one post.
+  MIN_POST_GAP_MINUTES: int(60),
   POST_MAX_CHARS: int(1800),
   DIGEST_MAX_CHARS: int(3600),
   DIGEST_MIN_ITEMS: int(3),
