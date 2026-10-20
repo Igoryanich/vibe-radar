@@ -8,11 +8,14 @@ name: radar
 #
 # Repository secrets:   GEMINI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHANNEL_ID   (optional: GEMINI_PAID_API_KEY)
 # Repository variables: DRY_RUN (default true — set to false to start posting), CHANNEL_NAME,
-#                       PAID_DAILY_BUDGET_EUR, MAX_POSTS_PER_DAY, POST_MIN_PLATFORMS (default 2)
+#                       PAID_DAILY_BUDGET_EUR, MAX_POSTS_PER_DAY, POST_MIN_PLATFORMS (default 2),
+#                       POST_THRESHOLD (default 7)
 
 on:
   schedule:
-    - cron: "12 * * * *"
+    # GitHub drops many scheduled runs (2 of 8 fired overnight on 2026-10-20), so ask twice an hour;
+    # the cycle is idempotent and the concurrency group keeps runs from overlapping.
+    - cron: "12,42 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -35,6 +38,7 @@ jobs:
       CHANNEL_NAME: ${{ vars.CHANNEL_NAME || '' }}
       MAX_POSTS_PER_DAY: ${{ vars.MAX_POSTS_PER_DAY || '' }}
       POST_MIN_PLATFORMS: ${{ vars.POST_MIN_PLATFORMS || '' }}
+      POST_THRESHOLD: ${{ vars.POST_THRESHOLD || '' }}
       DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
       # The workflow's own token: higher GitHub Search/API limits for the collectors.
       GITHUB_TOKEN: ${{ github.token }}
