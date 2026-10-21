@@ -24,11 +24,12 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write   # each run starts the next one (see the last step)
 
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 50
     env:
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GEMINI_PAID_API_KEY: ${{ secrets.GEMINI_PAID_API_KEY }}
@@ -45,6 +46,9 @@ jobs:
       GITHUB_TOKEN: ${{ github.token }}
       DATABASE_PATH: data/radar.db
     steps:
+      - name: Note the start time
+        run: echo "RUN_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v5
 
       - uses: actions/setup-node@v5
@@ -84,3 +88,17 @@ jobs:
           git add -A
           git commit -q -m "state $(date -u +%FT%TZ) [skip ci]"
           git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state
+
+      # GitHub's cron fired only every ~5 hours for this repo (2026-10-20/21), so the runs chain themselves
+      # (approved by the owner on 2026-10-21): each run starts the next ~30 min after its own start.
+      # workflow_dispatch from GITHUB_TOKEN is allowed to start a run. The concurrency group keeps a single
+      # chain (a newer pending run replaces an older one), and the cron above restarts the chain if it breaks.
+      # To stop it: disable the workflow (Actions → radar → ⋯ → Disable workflow).
+      - name: Start the next run
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          wait=$(( 1800 - ($(date +%s) - RUN_STARTED) ))
+          if [ "$wait" -gt 0 ]; then echo "next run in ${wait}s"; sleep "$wait"; fi
+          gh workflow run radar.yml --ref main -R "${{ github.repository }}"
