@@ -126,16 +126,22 @@ export async function writeChecked(
   data: unknown,
   links: Set<string>,
   maxChars: number,
+  now = new Date(),
 ): Promise<{ text: string } | { error: string }> {
   let note = "";
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const r = await llm.json({ system: systemPrompt(cfg, mode), user: user + note, schema: textSchema, tier: "editor", maxTokens: 4096, temperature: 0.5 });
+  // A digest is one text for ten projects, so a single stubborn figure must not cost the whole day: one more try.
+  const attempts = mode === "daily_digest" ? 3 : 2;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const r = await llm.json({ system: systemPrompt(cfg, mode, now), user: user + note, schema: textSchema, tier: "editor", maxTokens: 4096, temperature: 0.5 });
     const text = r.text.trim();
     const problems = checkPost(text, { maxChars, allowedLinks: links, data });
     if (!problems.length) return { text };
-    log.warn("draft failed checks", { mode, problems });
-    note = `\n\nПрошлый вариант не прошёл проверку: ${problems.join("; ")}. Исправь это (если превышена длина — сократи до ${Math.round(maxChars * 0.85)} знаков) и верни JSON заново.`;
-    if (attempt === 1) return { error: problems.join("; ") };
+    log.warn("draft failed checks", { mode, problems, attempt });
+    if (attempt === attempts - 1) return { error: problems.join("; ") };
+    const figures = problems.some((p) => p.startsWith("цифры"))
+      ? " Неподтверждённые числа удали из текста совсем (даже если они есть в summary / why_viral / evidence — это не измерения) или замени на измеренные из items[].metrics."
+      : "";
+    note = `\n\nПрошлый вариант не прошёл проверку: ${problems.join("; ")}. Исправь это (если превышена длина — сократи до ${Math.round(maxChars * 0.85)} знаков) и верни JSON заново.${figures}`;
   }
   return { error: "unreachable" };
 }

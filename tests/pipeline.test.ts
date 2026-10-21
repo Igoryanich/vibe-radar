@@ -234,3 +234,28 @@ test("posts are spread out: one per run and none within MIN_POST_GAP_MINUTES of 
   assert.equal(later.room, 1, "an hour later → one post, not a burst");
   assert.equal(later.queued, 1);
 });
+
+test("digest: a missed evening digest is sent the next night; a stubborn figure gets a third try", async () => {
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate({ status: "digest_only", hype_score: 5 })]);
+  const good = `<b>📡 Что взорвало AI-интернет сегодня</b>
+
+1. <b>God's Eye View</b> — шпионский спутник в браузере на открытых данных
+🔥 3 000 звёзд на GitHub меньше чем за сутки
+<a href="https://github.com/bilawalsidhu/gods-eye-view">→ ссылка</a>`;
+  const bad = good.replace("3 000 звёзд", "18,2 млн просмотров и 3 000 звёзд");
+  // Every hour counts as "before the digest hour" and "inside the catch-up window".
+  const night = { ...cfg, DIGEST_HOUR_LOCAL: 24, DIGEST_CATCHUP_HOUR: 24 };
+  const now = Date.now();
+  const yesterday = new Intl.DateTimeFormat("en-CA", { timeZone: cfg.TIMEZONE }).format(new Date(now - 24 * 3600_000));
+  const doneKey = `digest:last:${cfg.DRY_RUN ? "dry-run" : "live"}`;
+  db.kvSet(doneKey, yesterday);
+  assert.deepEqual(await maybeDigest(db, stubLlm([good]), night, false, now), { skipped: "not yet" }, "yesterday already done");
+  db.kvSet(doneKey, "2000-01-01");
+  const llm = stubLlm([bad, bad, good]);
+  const r = await maybeDigest(db, llm, night, false, now);
+  assert.equal((r as { queued?: boolean }).queued, true);
+  assert.equal(llm.calls, 3);
+  assert.ok(db.get("SELECT 1 FROM publications WHERE key = ?", `digest:${yesterday}`), "labelled with yesterday's date");
+  assert.equal(db.kvGet(doneKey), yesterday);
+});

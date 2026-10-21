@@ -26,13 +26,24 @@ export function digestSelection(db: Db, cfg: Config) {
   return { main, radar };
 }
 
-/** Once a day after DIGEST_HOUR_LOCAL: build and queue "what blew up the AI internet today". */
-export async function maybeDigest(db: Db, llm: Llm, cfg: Config, force = false) {
-  const day = localDate(cfg.TIMEZONE);
-  if (!force && localHour(cfg.TIMEZONE) < cfg.DIGEST_HOUR_LOCAL) return { skipped: "not yet" };
+/**
+ * Once a day after DIGEST_HOUR_LOCAL: build and queue "what blew up the AI internet today".
+ * If the evening digest failed or no run came before midnight, runs until DIGEST_CATCHUP_HOUR send yesterday's.
+ */
+export async function maybeDigest(db: Db, llm: Llm, cfg: Config, force = false, now = Date.now()) {
+  const hour = localHour(cfg.TIMEZONE, new Date(now));
   // Tracked per mode: a test-mode digest must not stop the real one on the day publishing is switched on.
   const doneKey = `digest:last:${cfg.DRY_RUN ? "dry-run" : "live"}`;
-  if (!force && db.kvGet(doneKey) === day) return { skipped: "already done today" };
+  const last = db.kvGet(doneKey);
+  let day = localDate(cfg.TIMEZONE, new Date(now));
+  let promptNow = new Date(now);
+  if (!force && hour < cfg.DIGEST_HOUR_LOCAL) {
+    const yesterday = localDate(cfg.TIMEZONE, new Date(now - 24 * 3600_000));
+    if (hour >= cfg.DIGEST_CATCHUP_HOUR || !last || last >= yesterday) return { skipped: "not yet" };
+    day = yesterday;
+    promptNow = new Date(now - (hour + 1) * 3600_000); // late yesterday evening: the date in the header
+  }
+  if (!force && last === day) return { skipped: "already done today" };
   const { main, radar } = digestSelection(db, cfg);
   if (main.length < cfg.DIGEST_MIN_ITEMS) {
     db.kvSet(doneKey, day);
@@ -55,7 +66,7 @@ export async function maybeDigest(db: Db, llm: Llm, cfg: Config, force = false) 
   const res = await writeChecked(
     llm, cfg, "daily_digest",
     `SELECTED_ITEMS (основной список):\n${JSON.stringify(selected)}\n\nНА РАДАРЕ (ранние сигналы, по одной строке):\n${JSON.stringify(onRadar)}\n\nPUBLISHED_HISTORY (отдельные посты за сутки — в дайджесте одной строкой со ссылкой на наш пост или пропусти):\n${JSON.stringify(history)}`,
-    trustedFacts(all), links, cfg.DIGEST_MAX_CHARS,
+    trustedFacts(all), links, cfg.DIGEST_MAX_CHARS, promptNow,
   );
   if ("error" in res) return { error: res.error };
   const channel = cfg.DRY_RUN ? "dry-run" : cfg.TELEGRAM_CHANNEL_ID;
