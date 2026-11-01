@@ -136,10 +136,11 @@ export async function maybeWeekly(db: Db, llm: Llm, cfg: Config, force = false, 
     db.kvSet(doneKey, day);
     return { skipped: `only ${top.length} projects this week` };
   }
-  const selected = top.map((x) => x.item);
+  // The link to our own post, spelled out so the writer cannot confuse it with the project link.
+  const selected = top.map((x) => ({ ...x.item, ...(x.item.previous_post?.url ? { our_post_url: x.item.previous_post.url } : {}) }));
   const res = await writeChecked(
     llm, cfg, "weekly_digest",
-    `SELECTED_ITEMS (топ недели, уже отсортирован: балл, затем измеренный рост за 7 дней; previous_post — наш пост о проекте):\n${JSON.stringify(selected)}`,
+    `SELECTED_ITEMS (топ недели, уже отсортирован: балл, затем измеренный рост за 7 дней; our_post_url — ссылка на наш пост о проекте, если он был):\n${JSON.stringify(selected)}`,
     trustedFacts(selected), allowedLinks(selected), cfg.DIGEST_MAX_CHARS, promptNow,
   );
   if ("error" in res) return { error: res.error };

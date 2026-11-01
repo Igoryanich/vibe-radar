@@ -112,6 +112,13 @@ export function bareLinks(html: string, allowed: Set<string>): string[] {
     });
 }
 
+/** Links labelled as our own post ("наш пост", "наш обзор") that do not point to a Telegram post. */
+export function ourPostLinksElsewhere(html: string): string[] {
+  return [...html.matchAll(/<a\s+href="([^"]*)"\s*>([^<]*)<\/a>/gi)]
+    .filter((m) => /наш(?:ем|е|ему)?\s+(пост|обзор|разбор)/i.test(m[2]) && !/^https:\/\/t\.me\//.test(decodeEntities(m[1])))
+    .map((m) => decodeEntities(m[1]));
+}
+
 /** Full gate for a model-written post. */
 export function checkPost(html: string, opts: { maxChars: number; allowedLinks: Set<string>; data: unknown }): string[] {
   const problems = htmlProblems(html);
@@ -120,6 +127,7 @@ export function checkPost(html: string, opts: { maxChars: number; allowedLinks: 
   if (len < 120) problems.push("слишком короткий текст");
   for (const h of hrefs(html)) if (!opts.allowedLinks.has(normalizeLink(h))) problems.push(`ссылки ${h} нет во входных данных`);
   for (const l of bareLinks(html, opts.allowedLinks)) problems.push(`ссылки ${l} нет во входных данных (ссылки и домены — только из входа)`);
+  for (const h of ourPostLinksElsewhere(html)) problems.push(`ссылка «наш пост» ведёт не на пост канала (${h}) — бери our_post_url`);
   if (cyrillicShare(html) < 0.5) problems.push("текст не на русском");
   const unknown = unknownFigures(html, opts.data);
   if (unknown.length) problems.push(`цифры, которых нет во входных данных: ${unknown.join(", ")}`);

@@ -4,7 +4,7 @@ import { parseTrending } from "../src/collectors/github.ts";
 import { parseHf, parseHn, parseReddit, parseRedditFeed } from "../src/collectors/social.ts";
 import { computeDelta, growthRatio } from "../src/metrics.ts";
 import { itemProjectKey, looksAiRelated, nameMentioned, projectKeyOf } from "../src/projects.ts";
-import { bareLinks, checkPost, cyrillicShare, figuresIn, htmlProblems, unknownFigures, visibleLength } from "../src/textcheck.ts";
+import { bareLinks, checkPost, cyrillicShare, ourPostLinksElsewhere, figuresIn, htmlProblems, unknownFigures, visibleLength } from "../src/textcheck.ts";
 
 const H = 3600_000;
 
@@ -151,4 +151,9 @@ test("bareLinks: tool names and the input's own hosts are fine, foreign domains 
   assert.deepEqual(bareLinks("на сайте godseye.app! и github.com/a/b", ok), []);
   assert.deepEqual(bareLinks("<a href=\"https://github.com/a/b\">тут</a>, почта me@mail.com", ok), []);
   assert.deepEqual(bareLinks("смотри scam-site.io", ok), ["scam-site.io"]);
+});
+
+test("a link labelled «наш пост» must point to our Telegram post, not to the project", () => {
+  const html = `<a href="https://github.com/a/b">→ проект</a> · <a href="https://github.com/a/b">наш пост</a> · <a href="https://t.me/c/123/45">наш пост</a>`;
+  assert.deepEqual(ourPostLinksElsewhere(html), ["https://github.com/a/b"]);
 });
