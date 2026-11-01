@@ -5,7 +5,7 @@ import { Llm } from "./llm.ts";
 import { log } from "./log.ts";
 import { buildCandidates } from "./pipeline/candidates.ts";
 import { collectAll, refreshTrackedRepos } from "./pipeline/collect.ts";
-import { maybeDigest } from "./pipeline/digest.ts";
+import { maybeDigest, maybeWeekly } from "./pipeline/digest.ts";
 import { queuePosts } from "./pipeline/editorial.ts";
 import { drain } from "./pipeline/publish.ts";
 import { scan } from "./pipeline/scan.ts";
@@ -20,10 +20,11 @@ const HELP = `Usage: node src/cli.ts <command>
   scan                run the AI scan on current candidates
   posts-queue         choose and write this run's posts
   digest              build today's digest now (ignores the hour)
+  weekly              build the weekly digest (top of the last 7 days) now
   publish             deliver pending publications
   posts [n]           print the latest n generated texts
   projects [n]        print the latest scan verdicts
-  prompt [mode]       print the filled system prompt (scan | single_post | daily_digest)
+  prompt [mode]       print the filled system prompt (scan | single_post | daily_digest | weekly_digest)
   sources             source health table`;
 
 const [cmd = "help", ...args] = process.argv.slice(2);
@@ -52,6 +53,9 @@ try {
       break;
     case "digest":
       console.log(await maybeDigest(db, llm, config, true));
+      break;
+    case "weekly":
+      console.log(await maybeWeekly(db, llm, config, true));
       break;
     case "publish":
       console.log(await drain(db, config, tg()));

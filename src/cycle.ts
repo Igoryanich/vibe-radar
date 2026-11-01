@@ -3,7 +3,7 @@ import type { Db } from "./db.ts";
 import { Llm } from "./llm.ts";
 import { errMsg, log } from "./log.ts";
 import { collectAll, refreshTrackedRepos } from "./pipeline/collect.ts";
-import { maybeDigest } from "./pipeline/digest.ts";
+import { maybeDigest, maybeWeekly } from "./pipeline/digest.ts";
 import { queuePosts } from "./pipeline/editorial.ts";
 import { prune, sourceHealth } from "./pipeline/maintenance.ts";
 import { drain } from "./pipeline/publish.ts";
@@ -37,6 +37,7 @@ export async function runCycle(db: Db, cfg: Config): Promise<Record<string, unkn
     await stage("scan", () => scan(db, llm, cfg));
     await stage("posts", () => queuePosts(db, llm, cfg));
     await stage("digest", () => maybeDigest(db, llm, cfg));
+    await stage("weekly", () => maybeWeekly(db, llm, cfg));
   } else stats.llm = "GEMINI_API_KEY not set — scan and writing skipped";
   await stage("publish", () => drain(db, cfg, tg));
   await stage("health", () => sourceHealth(db));

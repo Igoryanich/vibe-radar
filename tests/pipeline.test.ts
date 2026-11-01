@@ -6,7 +6,7 @@ import { Db } from "../src/db.ts";
 import type { Llm } from "../src/llm.ts";
 import { buildCandidates } from "../src/pipeline/candidates.ts";
 import { storeItem } from "../src/pipeline/collect.ts";
-import { maybeDigest } from "../src/pipeline/digest.ts";
+import { maybeDigest, maybeWeekly, weeklySelection } from "../src/pipeline/digest.ts";
 import { postDecision, queuePosts, type ProjectRow, updateAllowed } from "../src/pipeline/editorial.ts";
 import { applyScan, type Candidate, candidateSchema, conceptSkip, SCAN_VERSION } from "../src/pipeline/scan.ts";
 import { systemPrompt } from "../src/prompt.ts";
@@ -172,7 +172,7 @@ test("digest: built once a day from scanned projects", async () => {
 });
 
 test("system prompt: every variable is filled", () => {
-  for (const mode of ["scan", "single_post", "daily_digest"] as const) {
+  for (const mode of ["scan", "single_post", "daily_digest", "weekly_digest"] as const) {
     const p = systemPrompt(cfg, mode);
     assert.doesNotMatch(p, /\{\{/);
     assert.match(p, /God's Eye View/);
@@ -258,4 +258,42 @@ test("digest: a missed evening digest is sent the next night; a stubborn figure 
   assert.equal(llm.calls, 3);
   assert.ok(db.get("SELECT 1 FROM publications WHERE key = ?", `digest:${yesterday}`), "labelled with yesterday's date");
   assert.equal(db.kvGet(doneKey), yesterday);
+});
+
+test("weekly digest: top of 7 days incl. projects we posted about; big-company and old-concept verdicts left out", async () => {
+  const { db } = setup();
+  applyScan(db, buildCandidates(db, cfg), [candidate({ status: "digest_only", hype_score: 6 })]);
+  const add = (key: string, scan: Partial<Candidate> & { version: number }, row: { status: string; hype: number; posts?: number; postAgoH?: number; msg?: number }) =>
+    db.run(
+      `INSERT INTO projects(key, name, url, first_seen, last_seen, last_scan_at, scan, hype_score, stage, status, post_count, last_post_at, last_post_message_id)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      key, key, `https://github.com/${key.slice(3)}`, ago(100), ago(1), ago(30), JSON.stringify({ ...candidate({ project_keys: [key] }), ...scan }),
+      row.hype, "взлетает", row.status, row.posts ?? 0, row.postAgoH === undefined ? null : ago(row.postAgoH), row.msg ?? null,
+    );
+  // Posted two days ago; the rescan after the post said "skip: no news" — still part of the week.
+  add("gh:indie/posted", { version: SCAN_VERSION, status: "skip" }, { status: "skip", hype: 9, posts: 1, postAgoH: 48, msg: 7 });
+  add("gh:openai/thing", { version: SCAN_VERSION, category: "big_tech" }, { status: "digest_only", hype: 9 });
+  add("gh:indie/old-concept", { version: 2 }, { status: "digest_only", hype: 9 });
+  add("gh:indie/skipped", { version: SCAN_VERSION, status: "skip" }, { status: "skip", hype: 9 });
+
+  const top = weeklySelection(db, cfg).map((x) => x.p.key);
+  assert.deepEqual(top, ["gh:indie/posted", "gh:bilawalsidhu/gods-eye-view"], "sorted by score; big_tech, old concept and plain skips dropped");
+  const gods = weeklySelection(db, cfg)[1].item;
+  assert.ok(gods.items.some((i) => (i.metrics as Record<string, unknown>).delta_7d), "7-day delta is measured for the week");
+
+  const text = `<b>🏆 Топ недели в AI и вайб-кодинге</b>
+
+1. <b>posted</b> — инди-проект недели
+📈 обсуждали всю неделю
+<a href="https://github.com/indie/posted">→ проект</a> · <a href="https://t.me/vibe_radar/7">наш пост</a>
+
+2. <b>God's Eye View</b> — шпионский спутник в браузере
+📈 3 000 звёзд за неделю
+<a href="https://github.com/bilawalsidhu/gods-eye-view">→ проект</a>`;
+  const weekly = { ...cfg, WEEKLY_MIN_ITEMS: 2 };
+  const r = await maybeWeekly(db, stubLlm([text]), weekly, true);
+  assert.equal((r as { queued?: boolean }).queued, true);
+  const pub = db.get<{ kind: string; priority: number }>("SELECT kind, priority FROM publications WHERE key LIKE 'weekly:%'")!;
+  assert.deepEqual({ ...pub }, { kind: "weekly", priority: 99 }, "goes out right after the daily digest (100)");
+  assert.deepEqual(await maybeWeekly(db, stubLlm([text]), { ...weekly, WEEKLY_MIN_ITEMS: 3 }, true), { skipped: "only 2 projects this week" });
 });

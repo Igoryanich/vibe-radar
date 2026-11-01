@@ -68,18 +68,21 @@ export function channelPostLink(channel: string, messageId: number | null): stri
   return null;
 }
 
-/** Facts the writer may use for one project: the scan verdict plus fresh counters of every sighting. */
-export function selectedItem(db: Db, p: ProjectRow, cfg: Config) {
+/**
+ * Facts the writer may use for one project: the scan verdict plus fresh counters of every sighting.
+ * The weekly digest looks back 7 days and adds 7-day deltas.
+ */
+export function selectedItem(db: Db, p: ProjectRow, cfg: Config, opts: { windowHours?: number; withWeek?: boolean } = {}) {
   const s = json<Scan>(p.scan, {} as Scan);
   const items = db
     .all<{ id: number; url: string; platform: Platform; title: string; link: string | null; links: string; metrics: string; item_created_at: string | null; last_seen: string }>(
       "SELECT id, url, platform, title, link, links, metrics, item_created_at, last_seen FROM items WHERE project_key = ? AND last_seen >= ? ORDER BY last_seen DESC LIMIT 8",
-      p.key, hoursAgo(cfg.ITEM_WINDOW_HOURS),
+      p.key, hoursAgo(opts.windowHours ?? cfg.ITEM_WINDOW_HOURS),
     )
     .map((r) => {
       const current = json<Metrics>(r.metrics, {});
       const outbound = [...new Set([r.link, ...json<string[]>(r.links, [])].filter((x): x is string => !!x && x !== r.url))].slice(0, 5);
-      return { source: r.platform, url: r.url, title: r.title, ...(outbound.length ? { links: outbound } : {}), fetched_at: r.last_seen, metrics: { current, ...itemDeltas(db, r.id, r.platform, current, r.item_created_at) } };
+      return { source: r.platform, url: r.url, title: r.title, ...(outbound.length ? { links: outbound } : {}), fetched_at: r.last_seen, metrics: { current, ...itemDeltas(db, r.id, r.platform, current, r.item_created_at, opts.withWeek) } };
     });
   const prevLink = channelPostLink(cfg.TELEGRAM_CHANNEL_ID, p.last_post_message_id);
   return {
@@ -121,7 +124,7 @@ export function trustedFacts(selected: { items?: unknown; previous_post?: unknow
 export async function writeChecked(
   llm: Llm,
   cfg: Config,
-  mode: "single_post" | "daily_digest",
+  mode: "single_post" | "daily_digest" | "weekly_digest",
   user: string,
   data: unknown,
   links: Set<string>,
@@ -130,7 +133,7 @@ export async function writeChecked(
 ): Promise<{ text: string } | { error: string }> {
   let note = "";
   // A digest is one text for ten projects, so a single stubborn figure must not cost the whole day: one more try.
-  const attempts = mode === "daily_digest" ? 3 : 2;
+  const attempts = mode === "single_post" ? 2 : 3;
   for (let attempt = 0; attempt < attempts; attempt++) {
     const r = await llm.json({ system: systemPrompt(cfg, mode, now), user: user + note, schema: textSchema, tier: "editor", maxTokens: 4096, temperature: 0.5 });
     const text = r.text.trim();

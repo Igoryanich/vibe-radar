@@ -18,7 +18,7 @@ editorial rules: `prompts/system.md`.
 
 collect (`pipeline/collect.ts`, `collectors/*`) → refresh tracked repos → `candidates.ts` (group by project,
 deltas from `snapshots`, pre-rank) → `scan.ts` (model verdicts) → `editorial.ts` (code thresholds, write,
-check, queue) → `digest.ts` (daily, after DIGEST_HOUR_LOCAL) → `publish.ts` (Telegram queue) → prune.
+check, queue) → `digest.ts` (daily digest after DIGEST_HOUR_LOCAL, then the weekly top of 7 days) → `publish.ts` (Telegram queue) → prune.
 
 ## Editorial invariants (do not weaken without the owner's say)
 

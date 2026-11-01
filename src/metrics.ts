@@ -48,7 +48,7 @@ export function computeDelta(
   return null;
 }
 
-export function itemDeltas(db: Db, itemId: number, platform: Platform, metrics: Metrics, createdAt: string | null) {
+export function itemDeltas(db: Db, itemId: number, platform: Platform, metrics: Metrics, createdAt: string | null, withWeek = false) {
   const key = HEADLINE[platform];
   if (!key || metrics[key] === undefined) return {};
   const history = db
@@ -60,9 +60,11 @@ export function itemDeltas(db: Db, itemId: number, platform: Platform, metrics: 
   const current = metrics[key] as number;
   const d24 = computeDelta(past, current, createdAt, 24);
   const d72 = computeDelta(past, current, createdAt, 72);
+  const d7d = withWeek ? computeDelta(past, current, createdAt, 168) : null;
   return {
     ...(d24 ? { delta_24h: { [key]: d24.value, observed_hours: d24.hours, basis: d24.basis } } : {}),
     ...(d72 ? { delta_72h: { [key]: d72.value, observed_hours: d72.hours, basis: d72.basis } } : {}),
+    ...(d7d ? { delta_7d: { [key]: d7d.value, observed_hours: d7d.hours, basis: d7d.basis } } : {}),
   };
 }
 

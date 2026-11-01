@@ -10,6 +10,9 @@ import { nowIso } from "../util.ts";
 import { buildCandidates, type ProjectInput } from "./candidates.ts";
 
 export const SCAN_VERSION = 4;
+// Oldest scan version whose verdicts follow the current channel concept (the weekly digest looks back 7 days,
+// so it must not drop a week of verdicts every time the prompt version is bumped).
+export const CONCEPT_VERSION = 3;
 
 const STAGES = ["ранний сигнал", "взлетает", "мейнстрим"] as const;
 export type Stage = (typeof STAGES)[number];

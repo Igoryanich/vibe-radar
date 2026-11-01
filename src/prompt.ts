@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import type { Config } from "./config.ts";
 import { localDate } from "./util.ts";
 
-export type Mode = "scan" | "single_post" | "daily_digest";
+export type Mode = "scan" | "single_post" | "daily_digest" | "weekly_digest";
 
 const MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
@@ -28,6 +28,7 @@ export function systemPrompt(cfg: Config, mode: Mode, now = new Date()): string 
     DIGEST_MAX_CHARS: String(cfg.DIGEST_MAX_CHARS),
     DIGEST_TIME: `${String(cfg.DIGEST_HOUR_LOCAL).padStart(2, "0")}:00, ${cfg.TIMEZONE}`,
     DATE: ruDate(day),
+    WEEK_RANGE: `${ruDate(localDate(cfg.TIMEZONE, new Date(now.getTime() - 6 * 24 * 3600_000)))} – ${ruDate(day)}`,
   };
   const text = read(cfg.PROMPT_FILE).replace(/\{\{([A-Z_]+)\}\}/g, (m, name: string) => {
     if (!(name in vars)) throw new Error(`prompt variable ${m} has no value`);

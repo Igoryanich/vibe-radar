@@ -87,6 +87,10 @@ const schema = z.object({
   DIGEST_HOUR_LOCAL: int(21),
   // A digest missed in the evening (failed checks, no run before midnight) is still sent until this hour.
   DIGEST_CATCHUP_HOUR: int(4),
+  // Weekly digest (top projects of the last 7 days), queued right after the daily one, every day.
+  WEEKLY_DIGEST: bool.transform((v) => v ?? true),
+  WEEKLY_MIN_ITEMS: int(5),
+  WEEKLY_MAX_ITEMS: int(10),
   TIMEZONE: str("Europe/Helsinki"),
 
   // --- Telegram (auto-posting: everything that passes the checks goes straight to the channel)
